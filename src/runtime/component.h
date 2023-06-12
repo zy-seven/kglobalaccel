@@ -20,8 +20,6 @@ class GlobalShortcut;
 class GlobalShortcutContext;
 class GlobalShortcutsRegistry;
 
-namespace KdeDGlobalAccel
-{
 /**
  * @author Michael Jansen <kde@michael-jansen.biz>
  */
@@ -37,13 +35,10 @@ class Component : public QObject
 
 
 public:
-    //! Creates a new component. The component will be registered with @p
-    //! registry if specified and registered with dbus.
-    Component(const QString &uniqueName, const QString &friendlyName, GlobalShortcutsRegistry *registry = nullptr);
 
-    /* clang-format on */
 
     ~Component() override;
+    /* clang-format on */
 
     bool activateGlobalShortcutContext(const QString &uniqueName);
 
@@ -103,6 +98,12 @@ public:
     void writeSettings(KConfigGroup &config) const;
 
 protected:
+    friend class ::GlobalShortcutsRegistry;
+
+    //! Constructs a component. This is a private constructor, to create a component
+    //! use GlobalShortcutsRegistry::self()->createComponent().
+    Component(const QString &uniqueName, const QString &friendlyName);
+
     /**
      * Create a new globalShortcut by its name
      * @param uniqueName internal unique name to identify the shortcut
@@ -142,22 +143,26 @@ public Q_SLOTS:
     Q_SCRIPTABLE bool isActive() const;
 
     //! Get all shortcutnames living in @a context
-    Q_SCRIPTABLE QStringList shortcutNames(const QString &context = "default") const;
+    Q_SCRIPTABLE QStringList shortcutNames(const QString &context = QStringLiteral("default")) const;
 
     //! Returns all shortcut in @a context
-    Q_SCRIPTABLE QList<KGlobalShortcutInfo> allShortcutInfos(const QString &context = "default") const;
+    Q_SCRIPTABLE QList<KGlobalShortcutInfo> allShortcutInfos(const QString &context = QStringLiteral("default")) const;
 
     //! Returns the shortcut contexts available for the component.
     Q_SCRIPTABLE QStringList getShortcutContexts() const;
 
     virtual void emitGlobalShortcutPressed(const GlobalShortcut &shortcut);
+    virtual void emitGlobalShortcutReleased(const GlobalShortcut &shortcut);
 
-    Q_SCRIPTABLE void invokeShortcut(const QString &shortcutName, const QString &context = "default");
+    Q_SCRIPTABLE void invokeShortcut(const QString &shortcutName, const QString &context = QStringLiteral("default"));
 
 Q_SIGNALS:
 
     //! Signals that a action for this component was triggered
     Q_SCRIPTABLE void globalShortcutPressed(const QString &componentUnique, const QString &shortcutUnique, qlonglong timestamp);
+
+    //! Signals that a action for this component is not triggered anymore
+    Q_SCRIPTABLE void globalShortcutReleased(const QString &componentUnique, const QString &shortcutUnique, qlonglong timestamp);
 
 private:
     QString _uniqueName;
@@ -170,7 +175,5 @@ private:
     GlobalShortcutContext *_current;
     QHash<QString, GlobalShortcutContext *> _contexts;
 };
-
-}
 
 #endif /* #ifndef COMPONENT_H */

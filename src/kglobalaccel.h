@@ -73,6 +73,7 @@ public:
         Shadows,
         Shadowed,
     };
+    Q_ENUM(MatchType)
 
     /**
      * Returns (and creates if necessary) the singleton instance
@@ -87,6 +88,7 @@ public:
      */
     static void stealShortcutSystemwide(const QKeySequence &seq);
 
+#if KGLOBALACCEL_ENABLE_DEPRECATED_SINCE(5, 102)
     /**
      * Set global shortcut context.
      *
@@ -98,8 +100,11 @@ public:
      * @param context the name of the context.
      *
      * @since 4.2
+     * @deprecated since 5.102. Shortcut contexts are deprecated. No known users.
      */
+    KGLOBALACCEL_DEPRECATED_VERSION(5, 102, "Shortcut contexts are deprecated.")
     static void activateGlobalShortcutContext(const QString &contextUnique, const QString &contextFriendly, const QString &programName);
+#endif
 
     /**
      * Clean the shortcuts for component @a componentUnique.
@@ -380,10 +385,9 @@ Q_SIGNALS:
      * @see setGlobalShortcut
      * @see setDefaultShortcut
      * @since 5.0
-     *
-     * @todo KF6: add const to the QAction parameter
      */
-    void globalShortcutChanged(/*const would be better*/ QAction *action, const QKeySequence &seq);
+    void globalShortcutChanged(QAction *action, const QKeySequence &seq);
+    void globalShortcutActiveChanged(QAction *action, bool active);
 
 private:
     /// Creates a new KGlobalAccel object
@@ -399,5 +403,8 @@ private:
 
     friend class KGlobalAccelSingleton;
 };
+
+KGLOBALACCEL_EXPORT QDBusArgument &operator<<(QDBusArgument &argument, const KGlobalAccel::MatchType &type);
+KGLOBALACCEL_EXPORT const QDBusArgument &operator>>(const QDBusArgument &argument, KGlobalAccel::MatchType &type);
 
 #endif // _KGLOBALACCEL_H_

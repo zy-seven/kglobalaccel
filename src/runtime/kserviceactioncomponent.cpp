@@ -7,128 +7,191 @@
 */
 
 #include "kserviceactioncomponent.h"
-#include "globalshortcutcontext.h"
 #include "logging_p.h"
 
 #include <QDBusConnectionInterface>
+#include <QFileInfo>
 #include <QProcess>
 
 #include <KShell>
+#include <KWindowSystem>
 
-namespace KdeDGlobalAccel
-{
-KServiceActionComponent::KServiceActionComponent(const QString &serviceStorageId, const QString &friendlyName, GlobalShortcutsRegistry *registry)
-    : Component(serviceStorageId, friendlyName, registry)
+#include "config-kglobalaccel.h"
+#if HAVE_X11
+#include <KStartupInfo>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <private/qtx11extras_p.h>
+#else
+#include <QX11Info>
+#endif
+#endif
+
+KServiceActionComponent::KServiceActionComponent(const QString &serviceStorageId, const QString &friendlyName)
+    : Component(serviceStorageId, friendlyName)
     , m_serviceStorageId(serviceStorageId)
-    , m_desktopFile(nullptr)
 {
-    auto fileName = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("kglobalaccel/") + serviceStorageId);
-    if (fileName.isEmpty()) {
-        // Fallback to applications data dir
-        // for custom shortcut for instance
-        fileName = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("applications/") + serviceStorageId);
+    QString filePath = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("kglobalaccel/") + serviceStorageId);
+    if (filePath.isEmpty()) {
+        // Fallback to applications data dir for custom shortcut for instance
+        filePath = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("applications/") + serviceStorageId);
+        m_isInApplicationsDir = true;
+    } else {
+        QFileInfo info(filePath);
+        if (info.isSymLink()) {
+            const QString filePath2 = QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("applications/") + serviceStorageId);
+            if (info.symLinkTarget() == filePath2) {
+                filePath = filePath2;
+                m_isInApplicationsDir = true;
+            }
+        }
     }
-    if (fileName.isEmpty()) {
+
+    if (filePath.isEmpty()) {
         qCWarning(KGLOBALACCELD) << "No desktop file found for service " << serviceStorageId;
     }
-    m_desktopFile.reset(new KDesktopFile(fileName));
+    m_desktopFile.reset(new KDesktopFile(filePath));
 }
 
-KServiceActionComponent::~KServiceActionComponent()
-{
-}
+KServiceActionComponent::~KServiceActionComponent() = default;
 
-void runProcess(const KConfigGroup &group, bool klauncherAvailable)
+void KServiceActionComponent::runProcess(const KConfigGroup &group, const QString &token)
 {
-    QStringList parts = KShell::splitArgs(group.readEntry(QStringLiteral("Exec"), QString()));
-    if (parts.isEmpty()) {
+    QStringList args = KShell::splitArgs(group.readEntry(QStringLiteral("Exec"), QString()));
+    if (args.isEmpty()) {
         return;
     }
     // sometimes entries have an %u for command line parameters
-    if (parts.last().contains(QChar('%'))) {
-        parts.pop_back();
+    if (args.last().contains(QLatin1Char('%'))) {
+        args.pop_back();
     }
 
-    const QString command = parts.takeFirst();
+    const QString command = args.takeFirst();
+
+    auto startDetachedWithToken = [token](const QString &program, const QStringList &args) {
+        QProcess p;
+        p.setProgram(program);
+        p.setArguments(args);
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        if (!token.isEmpty()) {
+            if (KWindowSystem::isPlatformWayland()) {
+                env.insert(QStringLiteral("XDG_ACTIVATION_TOKEN"), token);
+            } else {
+                env.insert(QStringLiteral("DESKTOP_STARTUP_ID"), token);
+            }
+        }
+        p.setProcessEnvironment(env);
+        if (!p.startDetached()) {
+            qCWarning(KGLOBALACCELD) << "Failed to start" << program;
+        }
+    };
 
     const auto kstart = QStandardPaths::findExecutable(QStringLiteral("kstart5"));
     if (!kstart.isEmpty()) {
-        parts.prepend(command);
-        parts.prepend(QStringLiteral("--"));
-        QProcess::startDetached(kstart, parts);
-    } else if (klauncherAvailable) {
+        if (group.name() == QLatin1String("Desktop Entry") && m_isInApplicationsDir) {
+            startDetachedWithToken(kstart, {QStringLiteral("--application"), QFileInfo(m_desktopFile->fileName()).completeBaseName()});
+        } else {
+            args.prepend(command);
+            args.prepend(QStringLiteral("--"));
+            startDetachedWithToken(kstart, args);
+        }
+        return;
+    }
+
+    QDBusConnectionInterface *dbusDaemon = QDBusConnection::sessionBus().interface();
+    const bool klauncherAvailable = dbusDaemon->isServiceRegistered(QStringLiteral("org.kde.klauncher5"));
+    if (klauncherAvailable) {
         QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.kde.klauncher5"),
                                                           QStringLiteral("/KLauncher"),
                                                           QStringLiteral("org.kde.KLauncher"),
                                                           QStringLiteral("exec_blind"));
-        msg << command << parts;
+        msg << command << args;
 
         QDBusConnection::sessionBus().asyncCall(msg);
-    } else {
-        QProcess::startDetached(command, parts);
+        return;
     }
+
+    const QString cmdExec = QStandardPaths::findExecutable(command);
+    if (cmdExec.isEmpty()) {
+        qCWarning(KGLOBALACCELD) << "Could not find executable in PATH" << command;
+        return;
+    }
+    startDetachedWithToken(cmdExec, args);
 }
 
 void KServiceActionComponent::emitGlobalShortcutPressed(const GlobalShortcut &shortcut)
 {
     // TODO KF6 use ApplicationLauncherJob to start processes when it's available in a framework that we depend on
 
-    // DBusActivatatable spec as per https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#dbus
-    if (m_desktopFile->desktopGroup().readEntry("DBusActivatable", false)) {
-        QString method;
-        const QString serviceName = m_serviceStorageId.chopped(strlen(".desktop"));
-        const QString objectPath = QStringLiteral("/%1").arg(serviceName).replace(QLatin1Char('.'), QLatin1Char('/'));
-        const QString interface = QStringLiteral("org.freedesktop.Application");
-        QDBusMessage message;
-        if (shortcut.uniqueName() == QLatin1String("_launch")) {
-            message = QDBusMessage::createMethodCall(serviceName, objectPath, interface, QStringLiteral("Activate"));
-        } else {
-            message = QDBusMessage::createMethodCall(serviceName, objectPath, interface, QStringLiteral("ActivateAction"));
-            message << shortcut.uniqueName() << QVariantList();
-        }
-        message << QVariantMap();
-        QDBusConnection::sessionBus().asyncCall(message);
-        return;
-    }
+    auto launchWithToken = [this, shortcut](const QString &token) {
+        // DBusActivatatable spec as per https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html#dbus
+        if (m_desktopFile->desktopGroup().readEntry("DBusActivatable", false)) {
+            QString method;
+            const QString serviceName = m_serviceStorageId.chopped(strlen(".desktop"));
+            const QString objectPath = QStringLiteral("/%1").arg(serviceName).replace(QLatin1Char('.'), QLatin1Char('/'));
+            const QString interface = QStringLiteral("org.freedesktop.Application");
+            QDBusMessage message;
+            if (shortcut.uniqueName() == QLatin1String("_launch")) {
+                message = QDBusMessage::createMethodCall(serviceName, objectPath, interface, QStringLiteral("Activate"));
+            } else {
+                message = QDBusMessage::createMethodCall(serviceName, objectPath, interface, QStringLiteral("ActivateAction"));
+                message << shortcut.uniqueName() << QVariantList();
+            }
+            if (!token.isEmpty()) {
+                if (KWindowSystem::isPlatformWayland()) {
+                    message << QVariantMap{{QStringLiteral("activation-token"), token}};
+                } else {
+                    message << QVariantMap{{QStringLiteral("desktop-startup-id"), token}};
+                }
+            } else {
+                message << QVariantMap();
+            }
 
-    QDBusConnectionInterface *dbusDaemon = QDBusConnection::sessionBus().interface();
-    const bool klauncherAvailable = dbusDaemon->isServiceRegistered(QStringLiteral("org.kde.klauncher5"));
-
-    // we can't use KRun there as it depends from KIO and would create a circular dep
-    if (shortcut.uniqueName() == QLatin1String("_launch")) {
-        runProcess(m_desktopFile->desktopGroup(), klauncherAvailable);
-        return;
-    }
-    const auto lstActions = m_desktopFile->readActions();
-    for (const QString &action : lstActions) {
-        if (action == shortcut.uniqueName()) {
-            runProcess(m_desktopFile->actionGroup(action), klauncherAvailable);
+            QDBusConnection::sessionBus().asyncCall(message);
             return;
         }
+
+        // we can't use KRun there as it depends from KIO and would create a circular dep
+        if (shortcut.uniqueName() == QLatin1String("_launch")) {
+            runProcess(m_desktopFile->desktopGroup(), token);
+            return;
+        }
+        const auto lstActions = m_desktopFile->readActions();
+        for (const QString &action : lstActions) {
+            if (action == shortcut.uniqueName()) {
+                runProcess(m_desktopFile->actionGroup(action), token);
+                return;
+            }
+        }
+    };
+    if (KWindowSystem::isPlatformWayland()) {
+        const QString serviceName = m_serviceStorageId.chopped(strlen(".desktop"));
+        KWindowSystem::requestXdgActivationToken(nullptr, 0, serviceName);
+        connect(KWindowSystem::self(), &KWindowSystem::xdgActivationTokenArrived, this, [this, launchWithToken](int tokenSerial, const QString &token) {
+            if (tokenSerial == 0) {
+                launchWithToken(token);
+                bool b = disconnect(KWindowSystem::self(), &KWindowSystem::xdgActivationTokenArrived, this, nullptr);
+                Q_ASSERT(b);
+            }
+        });
+    } else {
+#if HAVE_X11
+        launchWithToken(QString::fromUtf8(KStartupInfo::createNewStartupIdForTimestamp(QX11Info::appTime())));
+#endif
     }
 }
 
 void KServiceActionComponent::loadFromService()
 {
-    QString shortcutString;
+    auto registerGroupShortcut = [this](const QString &name, const KConfigGroup &group) {
+        const QString shortcutString = group.readEntry(QStringLiteral("X-KDE-Shortcuts"), QString()).replace(QLatin1Char(','), QLatin1Char('\t'));
+        GlobalShortcut *shortcut = registerShortcut(name, group.readEntry(QStringLiteral("Name"), QString()), shortcutString, shortcutString);
+        shortcut->setIsPresent(true);
+    };
 
-    QStringList shortcuts = m_desktopFile->desktopGroup().readEntry(QStringLiteral("X-KDE-Shortcuts"), QString()).split(QChar(','));
-    if (!shortcuts.isEmpty()) {
-        shortcutString = shortcuts.join(QChar('\t'));
-    }
-
-    GlobalShortcut *shortcut = registerShortcut(QStringLiteral("_launch"), m_desktopFile->readName(), shortcutString, shortcutString);
-    shortcut->setIsPresent(true);
+    registerGroupShortcut(QStringLiteral("_launch"), m_desktopFile->desktopGroup());
     const auto lstActions = m_desktopFile->readActions();
     for (const QString &action : lstActions) {
-        shortcuts = m_desktopFile->actionGroup(action).readEntry(QStringLiteral("X-KDE-Shortcuts"), QString()).split(QChar(','));
-        if (!shortcuts.isEmpty()) {
-            shortcutString = shortcuts.join(QChar('\t'));
-        }
-
-        GlobalShortcut *shortcut =
-            registerShortcut(action, m_desktopFile->actionGroup(action).readEntry(QStringLiteral("Name")), shortcutString, shortcutString);
-        shortcut->setIsPresent(true);
+        registerGroupShortcut(action, m_desktopFile->actionGroup(action));
     }
 }
 
@@ -141,12 +204,7 @@ bool KServiceActionComponent::cleanUp()
         shortcut->setIsPresent(false);
     }
 
-    m_desktopFile->desktopGroup().writeEntry("NoDisplay", true);
-    m_desktopFile->desktopGroup().sync();
-
     return Component::cleanUp();
 }
-
-} // namespace KdeDGlobalAccel
 
 #include "moc_kserviceactioncomponent.cpp"

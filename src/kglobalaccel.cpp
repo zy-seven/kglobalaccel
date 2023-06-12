@@ -73,6 +73,13 @@ org::kde::kglobalaccel::Component *KGlobalAccelPrivate::getComponent(const QStri
                        invokeAction(componentUnique, shortcutUnique, timestamp);
                    });
 
+        q->connect(component,
+                   &org::kde::kglobalaccel::Component::globalShortcutReleased,
+                   q,
+                   [this](const QString &componentUnique, const QString &shortcutUnique, qlonglong) {
+                       invokeDeactivate(componentUnique, shortcutUnique);
+                   });
+
         components[componentUnique] = component;
     }
 
@@ -140,6 +147,7 @@ KGlobalAccel::KGlobalAccel()
     qDBusRegisterMetaType<QList<QStringList>>();
     qDBusRegisterMetaType<KGlobalShortcutInfo>();
     qDBusRegisterMetaType<QList<KGlobalShortcutInfo>>();
+    qDBusRegisterMetaType<KGlobalAccel::MatchType>();
 }
 
 KGlobalAccel::~KGlobalAccel()
@@ -147,12 +155,14 @@ KGlobalAccel::~KGlobalAccel()
     delete d;
 }
 
+#if KGLOBALACCEL_BUILD_DEPRECATED_SINCE(5, 102)
 void KGlobalAccel::activateGlobalShortcutContext(const QString &contextUnique, const QString &contextFriendly, const QString &programName)
 {
     Q_UNUSED(contextFriendly);
     // TODO: provide contextFriendly
     self()->d->iface()->activateGlobalShortcutContext(programName, contextUnique);
 }
+#endif
 
 // static
 bool KGlobalAccel::cleanComponent(const QString &componentUnique)
@@ -275,7 +285,11 @@ void KGlobalAccelPrivate::remove(QAction *action, Removal removal)
 
         if (!action->property("isConfigurationAction").toBool()) {
             // If it's a session shortcut unregister it.
-            action->objectName().startsWith(QLatin1String("_k_session:")) ? unregister(actionId) : setInactive(actionId);
+            if (action->objectName().startsWith(QLatin1String("_k_session:"))) {
+                unregister(actionId);
+            } else {
+                setInactive(actionId);
+            }
         }
     }
 
@@ -395,9 +409,10 @@ QList<int> KGlobalAccelPrivate::intListFromShortcut(const QList<QKeySequence> &c
 QList<QKeySequence> KGlobalAccelPrivate::shortcutFromIntList(const QList<int> &list)
 {
     QList<QKeySequence> ret;
-    for (int i : list) {
-        ret.append(i);
-    }
+    ret.reserve(list.size());
+    std::transform(list.begin(), list.end(), std::back_inserter(ret), [](int i) {
+        return QKeySequence(i);
+    });
     return ret;
 }
 
@@ -434,7 +449,7 @@ int timestampCompare(unsigned long time1_, unsigned long time2_) // like strcmp(
 }
 #endif
 
-void KGlobalAccelPrivate::invokeAction(const QString &componentUnique, const QString &actionUnique, qlonglong timestamp)
+QAction *KGlobalAccelPrivate::findAction(const QString &componentUnique, const QString &actionUnique)
 {
     QAction *action = nullptr;
     const QList<QAction *> candidates = nameToAction.values(actionUnique);
@@ -449,6 +464,15 @@ void KGlobalAccelPrivate::invokeAction(const QString &componentUnique, const QSt
     // - the action is not enabled
     // - the action is an configuration action
     if (!action || !action->isEnabled() || action->property("isConfigurationAction").toBool()) {
+        return nullptr;
+    }
+    return action;
+}
+
+void KGlobalAccelPrivate::invokeAction(const QString &componentUnique, const QString &actionUnique, qlonglong timestamp)
+{
+    QAction *action = findAction(componentUnique, actionUnique);
+    if (!action) {
         return;
     }
 
@@ -468,7 +492,23 @@ void KGlobalAccelPrivate::invokeAction(const QString &componentUnique, const QSt
 #endif
     action->setProperty("org.kde.kglobalaccel.activationTimestamp", timestamp);
 
+    if (m_lastActivatedAction != action) {
+        Q_EMIT q->globalShortcutActiveChanged(action, true);
+        m_lastActivatedAction = action;
+    }
     action->trigger();
+}
+
+void KGlobalAccelPrivate::invokeDeactivate(const QString &componentUnique, const QString &actionUnique)
+{
+    QAction *action = findAction(componentUnique, actionUnique);
+    if (!action) {
+        return;
+    }
+
+    m_lastActivatedAction.clear();
+
+    Q_EMIT q->globalShortcutActiveChanged(action, false);
 }
 
 #if KGLOBALACCEL_BUILD_DEPRECATED_SINCE(5, 90)
@@ -599,7 +639,7 @@ bool KGlobalAccel::promptStealShortcutSystemwide(QWidget *parent, const QList<KG
 
     QString message;
     if (shortcuts.size() == 1) {
-        message = tr("The '%1' key combination is registered by application %2 for action %3:").arg(seq.toString(), component, shortcuts[0].friendlyName());
+        message = tr("The '%1' key combination is registered by application %2 for action %3.").arg(seq.toString(), component, shortcuts[0].friendlyName());
     } else {
         QString actionList;
         for (const KGlobalShortcutInfo &info : shortcuts) {
@@ -751,6 +791,24 @@ bool KGlobalAccelPrivate::setShortcutWithDefault(QAction *action, const QList<QK
     actionShortcuts.insert(action, shortcut);
     updateGlobalShortcut(action, KGlobalAccelPrivate::DefaultShortcut | KGlobalAccelPrivate::ActiveShortcut, loadFlag);
     return true;
+}
+
+QDBusArgument &operator<<(QDBusArgument &argument, const KGlobalAccel::MatchType &type)
+{
+    argument.beginStructure();
+    argument << static_cast<int>(type);
+    argument.endStructure();
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, KGlobalAccel::MatchType &type)
+{
+    argument.beginStructure();
+    int arg;
+    argument >> arg;
+    type = static_cast<KGlobalAccel::MatchType>(arg);
+    argument.endStructure();
+    return argument;
 }
 
 #include "moc_kglobalaccel.cpp"

@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(KF_VERSION "5.90.0") # handled by release scripts
-set(KF_DEP_VERSION "5.90.0") # handled by release scripts
+set(KF_VERSION "5.103.0") # handled by release scripts
+set(KF_DEP_VERSION "5.103.0") # handled by release scripts
 project(KGlobalAccel VERSION ${KF_VERSION})
 
 # ECM setup
 include(FeatureSummary)
-find_package(ECM 5.90.0  NO_MODULE)
+find_package(ECM 5.103.0  NO_MODULE)
 set_package_properties(ECM PROPERTIES TYPE REQUIRED DESCRIPTION "Extra CMake Modules." URL "https://commits.kde.org/extra-cmake-modules")
 feature_summary(WHAT REQUIRED_PACKAGES_NOT_FOUND FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
@@ -25,8 +25,12 @@ include(ECMAddQch)
 include(ECMMarkNonGuiExecutable)
 include(ECMQtDeclareLoggingCategory)
 include(ECMPoQmTools)
+include(ECMDeprecationSettings)
 
 set(EXCLUDE_DEPRECATED_BEFORE_AND_AT 0 CACHE STRING "Control the range of deprecated API excluded from the build [default=0].")
+
+option(BUILD_RUNTIME "Build the kglobalacceld runtime" ON)
+add_feature_info(BUILD_RUNTIME ${BUILD_RUNTIME} "The kglobalacceld runtime")
 
 option(BUILD_QCH "Build API documentation in QCH format (for e.g. Qt Assistant, Qt Creator & KDevelop)" OFF)
 add_feature_info(QCH ${BUILD_QCH} "API documentation in QCH format (for e.g. Qt Assistant, Qt Creator & KDevelop)")
@@ -41,17 +45,18 @@ set(REQUIRED_QT_VERSION 5.15.2)
 find_package(Qt${QT_MAJOR_VERSION} ${REQUIRED_QT_VERSION} CONFIG REQUIRED DBus Widgets)
 
 # Dependencies of runtime component
-find_package(KF5Config ${KF_DEP_VERSION} REQUIRED)
-find_package(KF5CoreAddons ${KF_DEP_VERSION} REQUIRED)
-find_package(KF5Crash ${KF_DEP_VERSION} REQUIRED)
-find_package(KF5DBusAddons ${KF_DEP_VERSION} REQUIRED)
-find_package(KF5WindowSystem ${KF_DEP_VERSION} REQUIRED)
+if (BUILD_RUNTIME)
+    find_package(KF5Config ${KF_DEP_VERSION} REQUIRED)
+    find_package(KF5CoreAddons ${KF_DEP_VERSION} REQUIRED)
+    find_package(KF5Crash ${KF_DEP_VERSION} REQUIRED)
+    find_package(KF5DBusAddons ${KF_DEP_VERSION} REQUIRED)
+    find_package(KF5WindowSystem ${KF_DEP_VERSION} REQUIRED)
+endif()
 
 # no X11 stuff on mac
-if (NOT APPLE)
-    find_package(XCB MODULE COMPONENTS XCB KEYSYMS XKB OPTIONAL_COMPONENTS XTEST)
+if (BUILD_RUNTIME AND NOT APPLE)
+    find_package(XCB MODULE COMPONENTS XCB KEYSYMS XKB RECORD OPTIONAL_COMPONENTS XTEST)
     set_package_properties(XCB PROPERTIES DESCRIPTION "X protocol C-language Binding"
-                       URL "http://xcb.freedesktop.org"
                        TYPE OPTIONAL
                       )
 
@@ -68,13 +73,20 @@ if(X11_FOUND AND XCB_XCB_FOUND)
         find_package(Qt${QT_MAJOR_VERSION} ${REQUIRED_QT_VERSION} CONFIG REQUIRED Gui) # qtx11extras_p.h
     endif()
 endif()
-add_definitions(-DQT_DISABLE_DEPRECATED_BEFORE=0x050f02)
-add_definitions(-DKF_DISABLE_DEPRECATED_BEFORE_AND_AT=0x055100)
+
+ecm_set_disabled_deprecation_versions(
+    QT 5.15.2
+    KF 5.95.0
+)
+
 # Subdirectories
-ecm_install_po_files_as_qm(po)
+ecm_install_po_files_as_qm(poqm)
 
 add_subdirectory(src)
 if (BUILD_TESTING)
+    find_package(Qt${QT_MAJOR_VERSION} ${REQUIRED_QT_VERSION} CONFIG REQUIRED Test)
+
+    add_subdirectory(tests)
     add_subdirectory(autotests)
 endif()
 
@@ -107,7 +119,7 @@ install(EXPORT KF5GlobalAccelTargets DESTINATION "${CMAKECONFIG_INSTALL_DIR}" FI
 
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kglobalaccel_version.h
-        DESTINATION ${KDE_INSTALL_INCLUDEDIR_KF} COMPONENT Devel )
+        DESTINATION ${KDE_INSTALL_INCLUDEDIR_KF}/KGlobalAccel COMPONENT Devel)
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
 

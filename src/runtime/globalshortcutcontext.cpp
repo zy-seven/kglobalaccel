@@ -11,41 +11,40 @@
 #include "kglobalaccel.h"
 #include "sequencehelpers_p.h"
 
-GlobalShortcutContext::GlobalShortcutContext(const QString &uniqueName, const QString &friendlyName, KdeDGlobalAccel::Component *component)
+GlobalShortcutContext::GlobalShortcutContext(const QString &uniqueName, const QString &friendlyName, Component *component)
 
     : _uniqueName(uniqueName)
     , _friendlyName(friendlyName)
     , _component(component)
-    , _actions()
 {
 }
 
 GlobalShortcutContext::~GlobalShortcutContext()
 {
-    qDeleteAll(_actions);
-    _actions.clear();
+    qDeleteAll(_actionsMap);
+    _actionsMap.clear();
 }
 
 void GlobalShortcutContext::addShortcut(GlobalShortcut *shortcut)
 {
-    _actions.insert(shortcut->uniqueName(), shortcut);
+    _actionsMap.insert(shortcut->uniqueName(), shortcut);
 }
 
 QList<KGlobalShortcutInfo> GlobalShortcutContext::allShortcutInfos() const
 {
     QList<KGlobalShortcutInfo> rc;
-    for (GlobalShortcut *shortcut : std::as_const(_actions)) {
+    for (GlobalShortcut *shortcut : std::as_const(_actionsMap)) {
         rc.append(static_cast<KGlobalShortcutInfo>(*shortcut));
     }
     return rc;
 }
 
-KdeDGlobalAccel::Component const *GlobalShortcutContext::component() const
+Component const *GlobalShortcutContext::component() const
 {
     return _component;
 }
 
-KdeDGlobalAccel::Component *GlobalShortcutContext::component()
+Component *GlobalShortcutContext::component()
 {
     return _component;
 }
@@ -60,11 +59,11 @@ GlobalShortcut *GlobalShortcutContext::getShortcutByKey(const QKeySequence &key,
     if (key.isEmpty()) {
         return nullptr;
     }
-    QKeySequence keyMangled = mangleKey(key);
-    for (GlobalShortcut *sc : std::as_const(_actions)) {
+    QKeySequence keyMangled = Utils::mangleKey(key);
+    for (GlobalShortcut *sc : std::as_const(_actionsMap)) {
         const auto keys = sc->keys();
         for (const QKeySequence &other : keys) {
-            QKeySequence otherMangled = mangleKey(other);
+            QKeySequence otherMangled = Utils::mangleKey(other);
             switch (type) {
             case KGlobalAccel::MatchType::Equal:
                 if (otherMangled == keyMangled) {
@@ -72,12 +71,12 @@ GlobalShortcut *GlobalShortcutContext::getShortcutByKey(const QKeySequence &key,
                 }
                 break;
             case KGlobalAccel::MatchType::Shadows:
-                if (!other.isEmpty() && contains(keyMangled, otherMangled)) {
+                if (!other.isEmpty() && Utils::contains(keyMangled, otherMangled)) {
                     return sc;
                 }
                 break;
             case KGlobalAccel::MatchType::Shadowed:
-                if (!other.isEmpty() && contains(otherMangled, keyMangled)) {
+                if (!other.isEmpty() && Utils::contains(otherMangled, keyMangled)) {
                     return sc;
                 }
                 break;
@@ -91,10 +90,21 @@ GlobalShortcut *GlobalShortcutContext::takeShortcut(GlobalShortcut *shortcut)
 {
     // Try to take the shortcut. Result could be nullptr if the shortcut doesn't
     // belong to this component.
-    return _actions.take(shortcut->uniqueName());
+    return _actionsMap.take(shortcut->uniqueName());
 }
 
 QString GlobalShortcutContext::uniqueName() const
 {
     return _uniqueName;
+}
+
+bool GlobalShortcutContext::isShortcutAvailable(const QKeySequence &key) const
+{
+    for (auto it = _actionsMap.cbegin(), endIt = _actionsMap.cend(); it != endIt; ++it) {
+        const GlobalShortcut *sc = it.value();
+        if (Utils::matchSequences(key, sc->keys())) {
+            return false;
+        }
+    }
+    return true;
 }

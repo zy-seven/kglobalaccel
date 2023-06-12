@@ -1,34 +1,38 @@
 Source: kglobalaccel
 Section: libs
 Priority: optional
-Maintainer: Deepin Developer <deepin-dev@deepin.org>
-Uploaders: Deepin Packages Builder <packages@deepin.org>
-           Norbert Preining <norbert@preining.info>,
+Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
+Uploaders: Aurélien COUDERC <coucouf@debian.org>,
 Build-Depends: cmake (>= 3.16~),
                debhelper-compat (= 13),
+               dh-sequence-kf5,
                doxygen,
-               extra-cmake-modules (>= 5.90.0~),
-               libkf5config-dev (>= 5.90.0~),
-               libkf5coreaddons-dev (>= 5.90.0~),
-               libkf5crash-dev (>= 5.90.0~),
-               libkf5dbusaddons-dev (>= 5.90.0~),
-               libkf5windowsystem-dev (>= 5.90.0~),
+               extra-cmake-modules (>= 5.103.0~),
+               libkf5config-dev (>= 5.103.0~),
+               libkf5coreaddons-dev (>= 5.103.0~),
+               libkf5crash-dev (>= 5.103.0~),
+               libkf5dbusaddons-dev (>= 5.103.0~),
+               libkf5windowsystem-dev (>= 5.103.0~),
                libqt5sql5-sqlite,
                libqt5x11extras5-dev (>= 5.15.2~),
                libx11-dev,
                libxcb-keysyms1-dev,
+               libxcb-record0-dev,
                libxcb-xkb-dev,
                libxcb-xtest0-dev,
                libxcb1-dev,
                pkg-config,
                pkg-kde-tools (>= 0.15.15ubuntu1~),
                qtbase5-dev (>= 5.15.2~),
+               qtdeclarative5-dev <!nocheck>,
                qttools5-dev,
                qttools5-dev-tools,
-Standards-Version: 4.6.0
+               xauth <!nocheck>,
+               xvfb <!nocheck>,
+Standards-Version: 4.6.2
 Homepage: https://invent.kde.org/frameworks/kglobalaccel
-#Vcs-Browser
-#Vcs-Git
+Vcs-Browser: https://salsa.debian.org/qt-kde-team/kde/kglobalaccel
+Vcs-Git: https://salsa.debian.org/qt-kde-team/kde/kglobalaccel.git
 Rules-Requires-Root: no
 
 Package: libkf5globalaccel-bin
@@ -47,7 +51,7 @@ Description: Configurable global shortcut support.
 Package: libkf5globalaccel-data
 Architecture: all
 Multi-Arch: foreign
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: ${misc:Depends},
 Description: Configurable global shortcut support.
  KGlobalAccel allows you to have global accelerators that are
  independent of the focused window. Unlike regular shortcuts,
@@ -64,7 +68,7 @@ Depends: libkf5globalaccel5 (= ${binary:Version}),
          libkf5globalaccelprivate5 (= ${binary:Version}),
          qtbase5-dev (>= 5.15.2~),
          ${misc:Depends},
-Recommends: libkf5globalaccel-doc (= ${source:Version})
+Recommends: libkf5globalaccel-doc (= ${source:Version}),
 Description: development files for kglobalaccel
  KGlobalAccel allows you to have global accelerators that are
  independent of the focused window. Unlike regular shortcuts,
@@ -76,7 +80,7 @@ Description: development files for kglobalaccel
 Package: libkf5globalaccel-doc
 Architecture: all
 Multi-Arch: foreign
-Depends: ${misc:Depends}
+Depends: ${misc:Depends},
 Description: Configurable global shortcut support (documentation)
  KGlobalAccel allows you to have global accelerators that are
  independent of the focused window. Unlike regular shortcuts,
@@ -92,7 +96,7 @@ Multi-Arch: same
 Depends: libkf5globalaccel-data (= ${source:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
-Recommends: libkf5globalaccel-bin (= ${binary:Version})
+Recommends: libkf5globalaccel-bin (= ${binary:Version}),
 Description: Configurable global shortcut support.
  KGlobalAccel allows you to have global accelerators that are
  independent of the focused window. Unlike regular shortcuts,
@@ -102,7 +106,7 @@ Description: Configurable global shortcut support.
 Package: libkf5globalaccelprivate5
 Architecture: any
 Multi-Arch: same
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends},
 Description: Configurable global shortcut support - private runtime library
  KGlobalAccel allows you to have global accelerators that are
  independent of the focused window. Unlike regular shortcuts,
