@@ -22,6 +22,7 @@ libKF5GlobalAccel.so.5 libkf5globalaccel5 #MINVER#, libkf5globalaccel-bin
  _ZN12KGlobalAccel23stealShortcutSystemwideERK12QKeySequence@Base 4.96.0
  _ZN12KGlobalAccel24findActionNameSystemwideERK12QKeySequence@Base 4.96.0
  _ZN12KGlobalAccel25isGlobalShortcutAvailableERK12QKeySequenceRK7QString@Base 4.96.0
+ _ZN12KGlobalAccel27globalShortcutActiveChangedEP7QActionb@Base 5.94.0
  _ZN12KGlobalAccel29activateGlobalShortcutContextERK7QStringS2_S2_@Base 4.96.0
  _ZN12KGlobalAccel29promptStealShortcutSystemwideEP7QWidgetRK11QStringListRK12QKeySequence@Base 4.96.0
  _ZN12KGlobalAccel29promptStealShortcutSystemwideEP7QWidgetRK5QListI19KGlobalShortcutInfoERK12QKeySequence@Base 4.96.0
@@ -65,5 +66,7 @@ libKF5GlobalAccel.so.5 libkf5globalaccel5 #MINVER#, libkf5globalaccel-bin
  _ZTV19KGlobalShortcutInfo@Base 4.96.0
  _ZlsR13QDBusArgumentRK12QKeySequence@Base 5.90.0
  _ZlsR13QDBusArgumentRK19KGlobalShortcutInfo@Base 4.96.0
+ _ZlsR13QDBusArgumentRKN12KGlobalAccel9MatchTypeE@Base 5.96.0
  _ZrsRK13QDBusArgumentR12QKeySequence@Base 5.90.0
  _ZrsRK13QDBusArgumentR19KGlobalShortcutInfo@Base 4.96.0
+ _ZrsRK13QDBusArgumentRN12KGlobalAccel9MatchTypeE@Base 5.96.0

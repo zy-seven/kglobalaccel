@@ -10,7 +10,6 @@
 #include "globalshortcutsregistry.h"
 #include "kglobalaccel_interface.h"
 #include "logging_p.h"
-#include "sequencehelpers_p.h"
 #include <config-kglobalaccel.h>
 
 #include <QKeySequence>
@@ -30,9 +29,9 @@ static QList<QKeySequence> keysFromString(const QString &str)
     if (str == QLatin1String("none")) {
         return ret;
     }
-    const QStringList strList = str.split('\t');
+    const QStringList strList = str.split(QLatin1Char('\t'));
     for (const QString &s : strList) {
-        QKeySequence key = QKeySequence(s);
+        QKeySequence key = QKeySequence::fromString(s, QKeySequence::PortableText);
         if (!key.isEmpty()) { // sanity check just in case
             ret.append(key);
         }
@@ -47,40 +46,28 @@ static QString stringFromKeys(const QList<QKeySequence> &keys)
     }
     QString ret;
     for (const QKeySequence &key : keys) {
-        ret.append(key.toString());
-        ret.append('\t');
+        ret.append(key.toString(QKeySequence::PortableText));
+        ret.append(QLatin1Char('\t'));
     }
     ret.chop(1);
     return ret;
 }
 
-namespace KdeDGlobalAccel
-{
-Component::Component(const QString &uniqueName, const QString &friendlyName, GlobalShortcutsRegistry *registry)
+Component::Component(const QString &uniqueName, const QString &friendlyName)
     : _uniqueName(uniqueName)
     , _friendlyName(friendlyName)
-    , _registry(registry)
+    , _registry(GlobalShortcutsRegistry::self())
 {
     // Make sure we do no get uniquenames still containing the context
-    Q_ASSERT(uniqueName.indexOf("|") == -1);
+    Q_ASSERT(uniqueName.indexOf(QLatin1Char('|')) == -1);
 
-    // Register ourselves with the registry
-    if (_registry) {
-        _registry->addComponent(this);
-    }
-
-    QString DEFAULT = QStringLiteral("default");
+    const QString DEFAULT(QStringLiteral("default"));
     createGlobalShortcutContext(DEFAULT, QStringLiteral("Default Context"));
     _current = _contexts.value(DEFAULT);
 }
 
 Component::~Component()
 {
-    // Remove ourselves from the registry
-    if (_registry) {
-        _registry->takeComponent(this);
-    }
-
     // We delete all shortcuts from all contexts
     qDeleteAll(_contexts);
 }
@@ -88,7 +75,7 @@ Component::~Component()
 bool Component::activateGlobalShortcutContext(const QString &uniqueName)
 {
     if (!_contexts.value(uniqueName)) {
-        createGlobalShortcutContext(uniqueName, "TODO4");
+        createGlobalShortcutContext(uniqueName, QStringLiteral("TODO4"));
         return false;
     }
 
@@ -103,7 +90,7 @@ bool Component::activateGlobalShortcutContext(const QString &uniqueName)
 
 void Component::activateShortcuts()
 {
-    for (GlobalShortcut *shortcut : std::as_const(_current->_actions)) {
+    for (GlobalShortcut *shortcut : std::as_const(_current->_actionsMap)) {
         shortcut->setActive();
     }
 }
@@ -111,30 +98,22 @@ void Component::activateShortcuts()
 QList<GlobalShortcut *> Component::allShortcuts(const QString &contextName) const
 {
     GlobalShortcutContext *context = _contexts.value(contextName);
-    if (context) {
-        return context->_actions.values();
-    } else {
-        return QList<GlobalShortcut *>();
-    }
+    return context ? context->_actionsMap.values() : QList<GlobalShortcut *>{};
 }
 
 QList<KGlobalShortcutInfo> Component::allShortcutInfos(const QString &contextName) const
 {
     GlobalShortcutContext *context = _contexts.value(contextName);
-    if (!context) {
-        return QList<KGlobalShortcutInfo>();
-    }
-
-    return context->allShortcutInfos();
+    return context ? context->allShortcutInfos() : QList<KGlobalShortcutInfo>{};
 }
 
 bool Component::cleanUp()
 {
     bool changed = false;
 
-    const auto actions = _current->_actions;
+    const auto actions = _current->_actionsMap;
     for (GlobalShortcut *shortcut : actions) {
-        qCDebug(KGLOBALACCELD) << _current->_actions.size();
+        qCDebug(KGLOBALACCELD) << _current->_actionsMap.size();
         if (!shortcut->isPresent()) {
             changed = true;
             shortcut->unRegister();
@@ -166,24 +145,29 @@ GlobalShortcutContext *Component::currentContext()
 
 QDBusObjectPath Component::dbusPath() const
 {
+    auto isNonAscii = [](QChar ch) {
+        const char c = ch.unicode();
+        const bool isAscii = c == '_' //
+            || (c >= 'A' && c <= 'Z') //
+            || (c >= 'a' && c <= 'z') //
+            || (c >= '0' && c <= '9');
+        return !isAscii;
+    };
+
     QString dbusPath = _uniqueName;
-    // Clean up for dbus usage: any non-alphanumeric char should be turned into '_'
-    const int len = dbusPath.length();
-    for (int i = 0; i < len; ++i) {
-        if (!dbusPath[i].isLetterOrNumber() || dbusPath[i].unicode() >= 0x7F) {
-            // DBus path can only contain ASCII characters
-            dbusPath[i] = QLatin1Char('_');
-        }
-    }
+    // DBus path can only contain ASCII characters, any non-alphanumeric char should
+    // be turned into '_'
+    std::replace_if(dbusPath.begin(), dbusPath.end(), isNonAscii, QLatin1Char('_'));
+
     // QDBusObjectPath could be a little bit easier to handle :-)
-    return QDBusObjectPath(_registry->dbusPath().path() + "component/" + dbusPath);
+    return QDBusObjectPath(_registry->dbusPath().path() + QLatin1String("component/") + dbusPath);
 }
 
 void Component::deactivateShortcuts(bool temporarily)
 {
-    for (GlobalShortcut *shortcut : std::as_const(_current->_actions)) {
+    for (GlobalShortcut *shortcut : std::as_const(_current->_actionsMap)) {
         if (temporarily //
-            && uniqueName() == QLatin1String("kwin") //
+            && _uniqueName == QLatin1String("kwin") //
             && shortcut->uniqueName() == QLatin1String("Block Global Shortcuts")) {
             continue;
         }
@@ -195,7 +179,7 @@ void Component::emitGlobalShortcutPressed(const GlobalShortcut &shortcut)
 {
 #if HAVE_X11
     // pass X11 timestamp
-    long timestamp = QX11Info::appTime();
+    const long timestamp = QX11Info::appTime();
     // Make sure kglobalacceld has ungrabbed the keyboard after receiving the
     // keypress, otherwise actions in application that try to grab the
     // keyboard (e.g. in kwin) may fail to do so. There is still a small race
@@ -204,16 +188,37 @@ void Component::emitGlobalShortcutPressed(const GlobalShortcut &shortcut)
         _registry->_manager->syncWindowingSystem();
     }
 #else
-    long timestamp = 0;
+    const long timestamp = 0;
 #endif
 
-    // Make sure it is one of ours
     if (shortcut.context()->component() != this) {
-        // In production mode do nothing
         return;
     }
 
     Q_EMIT globalShortcutPressed(shortcut.context()->component()->uniqueName(), shortcut.uniqueName(), timestamp);
+}
+
+void Component::emitGlobalShortcutReleased(const GlobalShortcut &shortcut)
+{
+#if HAVE_X11
+    // pass X11 timestamp
+    const long timestamp = QX11Info::appTime();
+    // Make sure kglobalacceld has ungrabbed the keyboard after receiving the
+    // keypress, otherwise actions in application that try to grab the
+    // keyboard (e.g. in kwin) may fail to do so. There is still a small race
+    // condition with this being out-of-process.
+    if (_registry->_manager) {
+        _registry->_manager->syncWindowingSystem();
+    }
+#else
+    const long timestamp = 0;
+#endif
+
+    if (shortcut.context()->component() != this) {
+        return;
+    }
+
+    Q_EMIT globalShortcutReleased(shortcut.context()->component()->uniqueName(), shortcut.uniqueName(), timestamp);
 }
 
 void Component::invokeShortcut(const QString &shortcutName, const QString &context)
@@ -226,10 +231,7 @@ void Component::invokeShortcut(const QString &shortcutName, const QString &conte
 
 QString Component::friendlyName() const
 {
-    if (_friendlyName.isEmpty()) {
-        return _uniqueName;
-    }
-    return _friendlyName;
+    return !_friendlyName.isEmpty() ? _friendlyName : _uniqueName;
 }
 
 GlobalShortcut *Component::getShortcutByKey(const QKeySequence &key, KGlobalAccel::MatchType type) const
@@ -251,11 +253,8 @@ QList<GlobalShortcut *> Component::getShortcutsByKey(const QKeySequence &key, KG
 
 GlobalShortcut *Component::getShortcutByName(const QString &uniqueName, const QString &context) const
 {
-    if (!_contexts.value(context)) {
-        return nullptr;
-    }
-
-    return _contexts.value(context)->_actions.value(uniqueName);
+    const GlobalShortcutContext *shortcutContext = _contexts.value(context);
+    return shortcutContext ? shortcutContext->_actionsMap.value(uniqueName) : nullptr;
 }
 
 QStringList Component::getShortcutContexts() const
@@ -267,7 +266,7 @@ bool Component::isActive() const
 {
     // The component is active if at least one of it's global shortcuts is
     // present.
-    for (GlobalShortcut *shortcut : std::as_const(_current->_actions)) {
+    for (GlobalShortcut *shortcut : std::as_const(_current->_actionsMap)) {
         if (shortcut->isPresent()) {
             return true;
         }
@@ -282,18 +281,12 @@ bool Component::isShortcutAvailable(const QKeySequence &key, const QString &comp
     // if this component asks for the key. only check the keys in the same
     // context
     if (component == uniqueName()) {
-        const auto actions = shortcutContext(context)->_actions;
-        for (GlobalShortcut *sc : actions) {
-            if (matchSequences(key, sc->keys())) {
-                return false;
-            }
-        }
+        return shortcutContext(context)->isShortcutAvailable(key);
     } else {
-        for (GlobalShortcutContext *ctx : std::as_const(_contexts)) {
-            for (GlobalShortcut *sc : std::as_const(ctx->_actions)) {
-                if (matchSequences(key, sc->keys())) {
-                    return false;
-                }
+        for (auto it = _contexts.cbegin(), endIt = _contexts.cend(); it != endIt; ++it) {
+            const GlobalShortcutContext *ctx = it.value();
+            if (!ctx->isShortcutAvailable(key)) {
+                return false;
             }
         }
     }
@@ -312,7 +305,7 @@ Component::registerShortcut(const QString &uniqueName, const QString &friendlyNa
     QList<QKeySequence> newKeys = keys;
     for (const QKeySequence &key : keys) {
         if (!key.isEmpty()) {
-            if (GlobalShortcutsRegistry::self()->getShortcutByKey(key)) {
+            if (_registry->getShortcutByKey(key)) {
                 // The shortcut is already used. The config file is
                 // broken. Ignore the request.
                 newKeys.removeAll(key);
@@ -358,12 +351,8 @@ GlobalShortcutContext const *Component::shortcutContext(const QString &contextNa
 
 QStringList Component::shortcutNames(const QString &contextName) const
 {
-    GlobalShortcutContext *context = _contexts.value(contextName);
-    if (!context) {
-        return QStringList();
-    }
-
-    return context->_actions.keys();
+    const GlobalShortcutContext *context = _contexts.value(contextName);
+    return context ? context->_actionsMap.keys() : QStringList{};
 }
 
 QString Component::uniqueName() const
@@ -375,8 +364,8 @@ void Component::unregisterShortcut(const QString &uniqueName)
 {
     // Now wrote all contexts
     for (GlobalShortcutContext *context : std::as_const(_contexts)) {
-        if (context->_actions.value(uniqueName)) {
-            delete context->takeShortcut(context->_actions.value(uniqueName));
+        if (context->_actionsMap.value(uniqueName)) {
+            delete context->takeShortcut(context->_actionsMap.value(uniqueName));
         }
     }
 }
@@ -403,7 +392,7 @@ void Component::writeSettings(KConfigGroup &configGroup) const
 
         // qCDebug(KGLOBALACCELD) << "writing group " << _uniqueName << ":" << context->uniqueName();
 
-        for (const GlobalShortcut *shortcut : std::as_const(context->_actions)) {
+        for (const GlobalShortcut *shortcut : std::as_const(context->_actionsMap)) {
             // qCDebug(KGLOBALACCELD) << "writing" << shortcut->uniqueName();
 
             // We do not write fresh shortcuts.
@@ -421,5 +410,3 @@ void Component::writeSettings(KConfigGroup &configGroup) const
         }
     }
 }
-
-} // namespace KdeDGlobalAccel

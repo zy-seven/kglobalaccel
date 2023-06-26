@@ -21,6 +21,10 @@
 struct KGlobalAccelDPrivate;
 
 /**
+ * @note: Even though this is private API, KWin creates an object
+ * of this type, check in KWin to see which methods are used before
+ * removing them from here.
+ *
  * @todo get rid of all of those QStringList parameters.
  */
 class KGLOBALACCELPRIVATE_EXPORT KGlobalAccelD : public QObject, protected QDBusContext
@@ -52,6 +56,11 @@ public Q_SLOTS:
      */
     Q_SCRIPTABLE QList<QDBusObjectPath> allComponents() const;
 
+    /**
+     * Returns a list of QStringLists (one string list per known component,
+     * with each string list containing four strings, one for each enumerator
+     * in KGlobalAccel::actionIdFields).
+     */
     Q_SCRIPTABLE QList<QStringList> allMainComponents() const;
 
     Q_SCRIPTABLE QList<QStringList> allActionsForComponent(const QStringList &actionId) const;

@@ -41,7 +41,7 @@ ecm_generate_export_header(KF5GlobalAccel
     GROUP_BASE_NAME KF
     VERSION ${KF_VERSION}
     DEPRECATED_BASE_VERSION 0
-    DEPRECATION_VERSIONS 4.2 4.4 5.9 5.90
+    DEPRECATION_VERSIONS 4.2 4.4 5.9 5.90 5.102
     EXCLUDE_DEPRECATED_BEFORE_AND_AT ${EXCLUDE_DEPRECATED_BEFORE_AND_AT}
 )
 
@@ -74,7 +74,7 @@ ecm_generate_headers(KGlobalAccel_HEADERS
   REQUIRED_HEADERS KGlobalAccel_HEADERS
 )
 
-install(TARGETS KF5GlobalAccel EXPORT KF5GlobalAccelTargets ${KF5_INSTALL_TARGETS_DEFAULT_ARGS})
+install(TARGETS KF5GlobalAccel EXPORT KF5GlobalAccelTargets ${KF_INSTALL_TARGETS_DEFAULT_ARGS})
 
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/kglobalaccel_export.h
@@ -112,7 +112,9 @@ include(ECMGeneratePriFile)
 ecm_generate_pri_file(BASE_NAME KGlobalAccel LIB_NAME KF5GlobalAccel DEPS "dbus widgets" FILENAME_VAR PRI_FILENAME INCLUDE_INSTALL_DIR ${KDE_INSTALL_INCLUDEDIR_KF}/KGlobalAccel)
 install(FILES ${PRI_FILENAME} DESTINATION ${ECM_MKSPECS_INSTALL_DIR})
 
-add_subdirectory(runtime)
+if (BUILD_RUNTIME)
+    add_subdirectory(runtime)
+endif()
 
 ecm_qt_install_logging_categories(
     EXPORT KGLOBALACCEL

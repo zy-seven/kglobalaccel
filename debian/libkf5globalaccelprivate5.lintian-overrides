@@ -1,1 +1,1 @@
-libkf5globalaccelprivate5: lacks-unversioned-link-to-shared-library usr/lib/*/libKF5GlobalAccelPrivate.so.* usr/lib/*/libKF5GlobalAccelPrivate.so
+libkf5globalaccelprivate5: lacks-unversioned-link-to-shared-library example: usr/lib/x86_64-linux-gnu/libKF5GlobalAccelPrivate.so [usr/lib/x86_64-linux-gnu/libKF5GlobalAccelPrivate.so.*]

@@ -14,11 +14,7 @@
 
 #include <kglobalaccel.h>
 
-namespace KdeDGlobalAccel
-{
 class Component;
-}
-
 class GlobalShortcut;
 
 /**
@@ -30,7 +26,7 @@ public:
     /**
      * Default constructor
      */
-    GlobalShortcutContext(const QString &uniqueName, const QString &friendlyName, KdeDGlobalAccel::Component *component);
+    GlobalShortcutContext(const QString &uniqueName, const QString &friendlyName, Component *component);
 
     /**
      * Destructor
@@ -49,8 +45,8 @@ public:
     QString uniqueName() const;
     QString friendlyName() const;
 
-    KdeDGlobalAccel::Component *component();
-    KdeDGlobalAccel::Component const *component() const;
+    Component *component();
+    Component const *component() const;
 
     //! Get shortcut for @p key or nullptr
     GlobalShortcut *getShortcutByKey(const QKeySequence &key, KGlobalAccel::MatchType type) const;
@@ -58,8 +54,12 @@ public:
     //! Remove @p shortcut from the context. The shortcut is not deleted.
     GlobalShortcut *takeShortcut(GlobalShortcut *shortcut);
 
+    // Returns true if key is not used by any global shortcuts in this context,
+    // otherwise returns false
+    bool isShortcutAvailable(const QKeySequence &key) const;
+
 private:
-    friend class KdeDGlobalAccel::Component;
+    friend class Component;
 
     //! The unique name for this context
     QString _uniqueName;
@@ -67,11 +67,11 @@ private:
     //! The unique name for this context
     QString _friendlyName;
 
-    //! The component the context belongs too
-    KdeDGlobalAccel::Component *_component;
+    //! The component the context belongs to
+    Component *_component = nullptr;
 
     //! The actions associated with this context
-    QHash<QString, GlobalShortcut *> _actions;
+    QHash<QString, GlobalShortcut *> _actionsMap;
 };
 
 #endif /* #ifndef GLOBALSHORTCUTCONTEXT_H */

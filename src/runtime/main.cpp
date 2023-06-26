@@ -7,6 +7,7 @@
     SPDX-License-Identifier: LGPL-2.0-or-later
 */
 
+#include "kglobalaccel_version.h"
 #include "kglobalacceld.h"
 #include "logging_p.h"
 
@@ -36,15 +37,16 @@ extern "C" Q_DECL_EXPORT int main(int argc, char **argv)
     // ksmserver tries to register with kglobalaccel).
     qunsetenv("SESSION_MANAGER");
 
+    QGuiApplication::setDesktopSettingsAware(false);
     QGuiApplication app(argc, argv);
     KAboutData aboutdata(QStringLiteral("kglobalaccel"),
                          QObject::tr("KDE Global Shortcuts Service"),
-                         QStringLiteral("0.2"),
+                         QStringLiteral(KGLOBALACCEL_VERSION_STRING),
                          QObject::tr("KDE Global Shortcuts Service"),
                          KAboutLicense::LGPL,
-                         "(C) 2007-2009  Andreas Hartmetz, Michael Jansen");
-    aboutdata.addAuthor("Andreas Hartmetz", QObject::tr("Maintainer"), "ahartmetz@gmail.com");
-    aboutdata.addAuthor("Michael Jansen", QObject::tr("Maintainer"), "kde@michael-jansen.biz");
+                         QStringLiteral("(C) 2007-2009  Andreas Hartmetz, Michael Jansen"));
+    aboutdata.addAuthor(QStringLiteral("Andreas Hartmetz"), QObject::tr("Maintainer"), QStringLiteral("ahartmetz@gmail.com"));
+    aboutdata.addAuthor(QStringLiteral("Michael Jansen"), QObject::tr("Maintainer"), QStringLiteral("kde@michael-jansen.biz"));
 
     KAboutData::setApplicationData(aboutdata);
 

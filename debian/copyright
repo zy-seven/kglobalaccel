@@ -26,9 +26,9 @@ Copyright: 2007, Andreas Hartmetz <ahartmetz@gmail.com>
            2001, translate.org.za
 License: LGPL-2+
 
-Files: po/ca/kglobalaccel5_qt.po
-       po/ca@valencia/kglobalaccel5_qt.po
-       po/uk/kglobalaccel5_qt.po
+Files: poqm/ca/kglobalaccel5_qt.po
+       poqm/ca@valencia/kglobalaccel5_qt.po
+       poqm/uk/kglobalaccel5_qt.po
 Copyright: 2014, This_file_is_part_of_KDE
 License: LGPL-2.1+3+KDEeV
 
@@ -50,7 +50,7 @@ License: LGPL-2
  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
  Boston, MA 02110-1301, USA.
 
-Files: po/bg/kglobalaccel5_qt.po
+Files: poqm/bg/kglobalaccel5_qt.po
 Copyright: 2009-2013, Yasen Pramatarov <yasen@lindeas.com>
            2006-2009, Zlatko Popov <zlatkopopov@fsa-bg.org>
 License: GPL

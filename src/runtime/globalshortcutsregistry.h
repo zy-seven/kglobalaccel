@@ -9,6 +9,9 @@
 
 #include "kglobalaccel.h"
 
+#include "component.h"
+#include "kserviceactioncomponent.h"
+
 #include <KSharedConfig>
 
 #include <QDBusObjectPath>
@@ -16,13 +19,9 @@
 #include <QKeySequence>
 #include <QObject>
 
+class Component;
 class GlobalShortcut;
 class KGlobalAccelInterface;
-
-namespace KdeDGlobalAccel
-{
-class Component;
-}
 
 /**
  * Global Shortcut Registry.
@@ -60,9 +59,18 @@ public:
     void activateShortcuts();
 
     /**
-     * Return a list of all main components
+     * Returns a list of D-Bus paths of registered Components.
+     *
+     * The returned paths are absolute (i.e. no need to prepend anything).
      */
-    QList<KdeDGlobalAccel::Component *> allMainComponents() const;
+    QList<QDBusObjectPath> componentsDbusPaths() const;
+
+    /**
+     * Returns a list of QStringLists (one string list per registered component,
+     * with each string list containing four strings, one for each enumerator in
+     * KGlobalAccel::actionIdFields).
+     */
+    QList<QStringList> allComponentNames() const;
 
     /**
      * Return the root dbus path for the registry.
@@ -75,14 +83,8 @@ public:
     void deactivateShortcuts(bool temporarily = false);
 
     /**
-     * Get the shortcut corresponding to key. Only active shortcut are
-     * considered.
      */
-    GlobalShortcut *getActiveShortcutByKey(const QKeySequence &key) const;
-
-    /**
-     */
-    KdeDGlobalAccel::Component *getComponent(const QString &uniqueName);
+    Component *getComponent(const QString &uniqueName);
 
     /**
      * Get the shortcut corresponding to key. Active and inactive shortcuts
@@ -125,7 +127,7 @@ public Q_SLOTS:
 
     void loadSettings();
 
-    void writeSettings() const;
+    void writeSettings();
 
     // Grab the keys
     void grabKeys();
@@ -134,26 +136,44 @@ public Q_SLOTS:
     void ungrabKeys();
 
 private:
-    friend class KdeDGlobalAccel::Component;
-    friend class KGlobalAccelInterface;
 
-    KdeDGlobalAccel::Component *addComponent(KdeDGlobalAccel::Component *component);
-    KdeDGlobalAccel::Component *takeComponent(KdeDGlobalAccel::Component *component);
+    friend class KGlobalAccelDPrivate;
+    friend class Component;
+    friend class KGlobalAccelInterface;
+    friend class KGlobalAccelInterfaceV2;
+
+    Component *createComponent(const QString &uniqueName, const QString &friendlyName);
+    KServiceActionComponent *createServiceActionComponent(const QString &uniqueName, const QString &friendlyName);
+
+    static void unregisterComponent(Component *component);
+    using ComponentPtr = std::unique_ptr<Component, decltype(&unregisterComponent)>;
+
+    Component *registerComponent(ComponentPtr component);
 
     // called by the implementation to inform us about key presses
     // returns true if the key was handled
     bool keyPressed(int keyQt);
+    bool keyReleased(int keyQt);
 
     QHash<QKeySequence, GlobalShortcut *> _active_keys;
     QKeySequence _active_sequence;
     QHash<int, int> _keys_count;
-    QHash<QString, KdeDGlobalAccel::Component *> _components;
 
-    KGlobalAccelInterface *_manager;
+    using ComponentVec = std::vector<ComponentPtr>;
+    ComponentVec m_components;
+    ComponentVec::const_iterator findByName(const QString &name) const
+    {
+        return std::find_if(m_components.cbegin(), m_components.cend(), [&name](const ComponentPtr &comp) {
+            return comp->uniqueName() == name;
+        });
+    }
+
+    KGlobalAccelInterface *_manager = nullptr;
 
     mutable KConfig _config;
 
     QDBusObjectPath _dbusPath;
+    GlobalShortcut *m_lastShortcut = nullptr;
 };
 
 #endif /* #ifndef GLOBALSHORTCUTSREGISTRY_H */

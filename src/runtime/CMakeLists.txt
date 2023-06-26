@@ -1,6 +1,3 @@
-remove_definitions(-DQT_NO_CAST_FROM_BYTEARRAY)
-remove_definitions(-DQT_NO_CAST_FROM_ASCII)
-
 ###############################################################################
 ### KDED Global Accel Daemon
 
@@ -13,6 +10,7 @@ set(kglobalaccelprivate_SRCS
     globalshortcut.cpp
     globalshortcutsregistry.cpp
     globalshortcutcontext.cpp
+    ../sequencehelpers_p.cpp
 )
 ecm_create_qm_loader(kglobalaccelprivate_SRCS kglobalaccel5_qt)
 
@@ -56,6 +54,9 @@ endif()
 
 add_executable(kglobalaccel5 main.cpp logging.cpp)
 ecm_mark_nongui_executable(kglobalaccel5)
+
+target_include_directories(kglobalaccel5 PRIVATE ${CMAKE_BINARY_DIR})
+
 target_link_libraries(kglobalaccel5
     KF5GlobalAccelPrivate
     KF5::DBusAddons   # KDBusService
@@ -65,9 +66,12 @@ target_link_libraries(kglobalaccel5
 add_subdirectory(plugins)
 
 # Install application and configuration
-install(TARGETS KF5GlobalAccelPrivate EXPORT KF5GlobalAccelTargets ${KF5_INSTALL_TARGETS_DEFAULT_ARGS} LIBRARY NAMELINK_SKIP)
-install( TARGETS kglobalaccel5 ${KF5_INSTALL_TARGETS_DEFAULT_ARGS} )
-install( FILES kglobalaccel.desktop  DESTINATION ${KDE_INSTALL_KSERVICESDIR} RENAME kglobalaccel5.desktop)
+install(TARGETS KF5GlobalAccelPrivate EXPORT KF5GlobalAccelTargets ${KF_INSTALL_TARGETS_DEFAULT_ARGS} LIBRARY NAMELINK_SKIP)
+install( TARGETS kglobalaccel5 ${KF_INSTALL_TARGETS_DEFAULT_ARGS} )
+
+if(NOT EXCLUDE_DEPRECATED_BEFORE_AND_AT STREQUAL "CURRENT" AND EXCLUDE_DEPRECATED_BEFORE_AND_AT VERSION_LESS 5.102.0)
+    install( FILES kglobalaccel.desktop  DESTINATION ${KDE_INSTALL_KSERVICESDIR} RENAME kglobalaccel5.desktop)
+endif()
 
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/kf5globalaccelprivate_export.h
