@@ -45,6 +45,8 @@ public:
         Autoloading = 0x0,
         /// Prevent autoloading of saved global shortcut for action
         NoAutoloading = 0x4,
+        /// Empty shortcut force set
+        EmptyNoAutoload = 0x10,
     };
 
     /**

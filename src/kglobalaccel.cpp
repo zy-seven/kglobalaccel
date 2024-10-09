@@ -331,6 +331,9 @@ void KGlobalAccelPrivate::updateGlobalShortcut(/*const would be better*/ QAction
     if (globalFlags & NoAutoloading) {
         setterFlags |= NoAutoloading;
     }
+    if (globalFlags & EmptyNoAutoload) {
+        setterFlags |= EmptyNoAutoload;
+    }
 
     if (actionFlags & ActiveShortcut) {
         const QList<QKeySequence> activeShortcut = actionShortcuts.value(action);

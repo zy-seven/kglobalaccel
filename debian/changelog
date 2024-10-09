@@ -1,3 +1,10 @@
+kglobalaccel (5.103.0-1deepin1) unstable; urgency=medium
+
+  [ zhangyu ]
+  * Support overwrite shortcut value when it's none
+
+ -- zhangyu <zhangyud@uniontech.com>  Wed, 09 Oct 2024 15:45:28 +0100
+
 kglobalaccel (5.103.0-1) unstable; urgency=medium
 
   [ Aurélien COUDERC ]

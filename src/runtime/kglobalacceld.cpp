@@ -469,8 +469,9 @@ QList<QKeySequence> KGlobalAccelD::setShortcutKeys(const QStringList &actionId, 
 {
     // spare the DBus framework some work
     const bool setPresent = (flags & SetPresent);
-    const bool isAutoloading = !(flags & NoAutoloading);
+    bool isAutoloading = !(flags & NoAutoloading);
     const bool isDefault = (flags & IsDefault);
+    const bool emptyNoAutoload = (flags & EmptyNoAutoload);
 
     GlobalShortcut *shortcut = d->findAction(actionId);
     if (!shortcut) {
@@ -484,6 +485,10 @@ QList<QKeySequence> KGlobalAccelD::setShortcutKeys(const QStringList &actionId, 
             scheduleWriteSettings();
         }
         return keys; // doesn't matter
+    }
+
+    if (emptyNoAutoload && !shortcut->keys().size()) {
+        isAutoloading = false;
     }
 
     if (isAutoloading && !shortcut->isFresh()) {
