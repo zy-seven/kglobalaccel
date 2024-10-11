@@ -1,0 +1,96 @@
+From f50a1b250e5724f3760de8a75f37e68db1761797 Mon Sep 17 00:00:00 2001
+From: zhangyu <zhangyud@uniontech.com>
+Date: Wed, 9 Oct 2024 15:42:13 +0800
+Subject: [PATCH] fix: fix issues about none value can't overwrite
+
+fix issues about none value can't overwrite
+
+Log: fix issues about none value can't overwrite
+---
+ src/kglobalaccel.cpp          | 3 +++
+ src/kglobalaccel.h            | 2 ++
+ src/kglobalaccel_p.h          | 1 +
+ src/runtime/kglobalacceld.cpp | 7 ++++++-
+ src/runtime/kglobalacceld.h   | 1 +
+ 5 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/src/kglobalaccel.cpp b/src/kglobalaccel.cpp
+index c2b9524..4493976 100644
+--- a/src/kglobalaccel.cpp
++++ b/src/kglobalaccel.cpp
+@@ -331,6 +331,9 @@ void KGlobalAccelPrivate::updateGlobalShortcut(/*const would be better*/ QAction
+     if (globalFlags & NoAutoloading) {
+         setterFlags |= NoAutoloading;
+     }
++    if (globalFlags & EmptyNoAutoload) {
++        setterFlags |= EmptyNoAutoload;
++    }
+ 
+     if (actionFlags & ActiveShortcut) {
+         const QList<QKeySequence> activeShortcut = actionShortcuts.value(action);
+diff --git a/src/kglobalaccel.h b/src/kglobalaccel.h
+index c3a875a..64de497 100644
+--- a/src/kglobalaccel.h
++++ b/src/kglobalaccel.h
+@@ -45,6 +45,8 @@ public:
+         Autoloading = 0x0,
+         /// Prevent autoloading of saved global shortcut for action
+         NoAutoloading = 0x4,
++        /// Empty shortcut force set
++        EmptyNoAutoload = 0x10,
+     };
+ 
+     /**
+diff --git a/src/kglobalaccel_p.h b/src/kglobalaccel_p.h
+index a903e23..f66ebb3 100644
+--- a/src/kglobalaccel_p.h
++++ b/src/kglobalaccel_p.h
+@@ -23,6 +23,7 @@ enum SetShortcutFlag {
+     SetPresent = 2,
+     NoAutoloading = 4,
+     IsDefault = 8,
++    EmptyNoAutoload = 16,
+ };
+ 
+ class KGlobalAccelPrivate
+diff --git a/src/runtime/kglobalacceld.cpp b/src/runtime/kglobalacceld.cpp
+index f926358..7246ee1 100644
+--- a/src/runtime/kglobalacceld.cpp
++++ b/src/runtime/kglobalacceld.cpp
+@@ -469,8 +469,9 @@ QList<QKeySequence> KGlobalAccelD::setShortcutKeys(const QStringList &actionId,
+ {
+     // spare the DBus framework some work
+     const bool setPresent = (flags & SetPresent);
+-    const bool isAutoloading = !(flags & NoAutoloading);
++    bool isAutoloading = !(flags & NoAutoloading);
+     const bool isDefault = (flags & IsDefault);
++    const bool emptyNoAutoload = (flags & EmptyNoAutoload);
+ 
+     GlobalShortcut *shortcut = d->findAction(actionId);
+     if (!shortcut) {
+@@ -486,6 +487,10 @@ QList<QKeySequence> KGlobalAccelD::setShortcutKeys(const QStringList &actionId,
+         return keys; // doesn't matter
+     }
+ 
++    if (emptyNoAutoload && !shortcut->keys().size()) {
++        isAutoloading = false;
++    }
++
+     if (isAutoloading && !shortcut->isFresh()) {
+         // the trivial and common case - synchronize the action from our data
+         // and exit.
+diff --git a/src/runtime/kglobalacceld.h b/src/runtime/kglobalacceld.h
+index 3108b75..a0c94fa 100644
+--- a/src/runtime/kglobalacceld.h
++++ b/src/runtime/kglobalacceld.h
+@@ -37,6 +37,7 @@ public:
+         SetPresent = 2,
+         NoAutoloading = 4,
+         IsDefault = 8,
++        EmptyNoAutoload = 16,
+     };
+     Q_ENUM(SetShortcutFlag)
+     Q_DECLARE_FLAGS(SetShortcutFlags, SetShortcutFlag)
+-- 
+2.20.1
+
